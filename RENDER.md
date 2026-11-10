@@ -1,20 +1,26 @@
-# Deploy the chat UI on Render Free
+# Deploy Ollama + ChatBot together on Render
 
-## Important limitation
+This configuration runs Ollama and the ChatBot web app inside the **same Render service/container**. It uses the compact `qwen2.5:0.5b` model (approximately 398 MB to download), not the previous multi-gigabyte model.
 
-Render Free web services have 512 MB RAM and an ephemeral filesystem. They do not support persistent disks. This makes running Ollama and a local model inside the same Free service impractical: the model files disappear after a restart/spin-down/redeploy, and the available memory is too small for the default `llama3.2:3b` model.
+## Render requirements
 
-For a Render Free deployment, use the lightweight `Dockerfile.render` for the web UI and connect it to an Ollama server running on a different machine that you control. That Ollama machine must be reachable over HTTPS/network and have sufficient RAM/storage. Do not expose an unauthenticated Ollama API publicly.
+- Use the **Standard** web service plan (2 GB RAM) or a larger plan.
+- Attach a persistent disk mounted at `/root/.ollama`. The included `render.yaml` defines a 1 GB disk.
+- Render Free is not suitable: it has 512 MB RAM and does not support persistent disks. Even a small model can exceed the available memory once Ollama and the web app are running.
 
-## Setup
+## Deploy
 
-1. Deploy this repository on Render using the included `render.yaml` Blueprint, or set the Dockerfile path to `Dockerfile.render`.
-2. In the Render service environment settings, set `OLLAMA_URL` to your reachable Ollama server base URL (for example, `https://your-secured-ollama-host.example.com`, without a trailing slash).
-3. Set `OLLAMA_MODEL` to a model already pulled on that Ollama server, such as `llama3.2:3b`.
-4. Redeploy and check `/api/health`.
+1. Open the [Render dashboard](https://dashboard.render.com/).
+2. Create or update the service from this repository using the included Blueprint `render.yaml`.
+3. Confirm the service uses `./Dockerfile` (not `Dockerfile.render`).
+4. Confirm the service plan is Standard or higher and the disk mount path is `/root/.ollama`.
+5. Deploy. On first startup, Ollama downloads the model. On subsequent starts, the persistent disk lets Ollama reuse it instead of downloading it again.
+6. After deployment, open `https://YOUR-SERVICE.onrender.com/api/health`. A healthy response includes `"ollama":"connected"` and the installed model list.
 
-The Render deployment will no longer install Ollama or download a 2 GB model as part of the Render service startup. It only hosts the chat UI/API proxy.
+## Change the model
 
-## If Ollama must run on the same host
+Set `OLLAMA_MODEL` to another Ollama model tag in Render's Environment settings. Smaller models use less memory but generally produce less capable answers. The default is `qwen2.5:0.5b`.
 
-Use a paid Render service with enough RAM and a persistent disk mounted at `/root/.ollama`, or host the all-in-one `Dockerfile` on a machine with adequate memory and persistent storage. Render Free cannot attach persistent disks, and changing the startup script alone cannot preserve model files after the service's filesystem is reset.
+## Note
+
+The configuration changes the Render Blueprint to a paid Standard service because Render Free cannot provide the RAM and persistent disk needed for this architecture. Review the selected plan and estimated cost in Render before applying it.
