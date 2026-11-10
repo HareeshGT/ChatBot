@@ -2,12 +2,14 @@ services:
   - type: web
     name: chatbot-web
     runtime: docker
-    plan: free
-    dockerfilePath: ./Dockerfile.render
+    plan: standard
+    dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /api/health
+    disk:
+      name: ollama-models
+      mountPath: /root/.ollama
+      sizeGB: 1
     envVars:
-      - key: OLLAMA_URL
-        sync: false
       - key: OLLAMA_MODEL
-        value: llama3.2:3b
+        value: qwen2.5:0.5b
