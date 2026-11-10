@@ -1,38 +1,16 @@
-#!/usr/bin/env bash
-set -Eeuo pipefail
+#!/usr/bin/env sh
+set -eu
 
-: "${OLLAMA_MODEL:=qwen2.5:0.5b}"
-: "${OLLAMA_HOST:=127.0.0.1:11434}"
+: "${MODEL_REPO:=Qwen/Qwen2.5-0.5B-Instruct-GGUF}"
+: "${MODEL_FILE:=qwen2.5-0.5b-instruct-q4_k_m.gguf}"
+: "${MODEL_DIR:=/models}"
+: "${MODEL_PATH:=${MODEL_DIR}/${MODEL_FILE}}"
 : "${PORT:=8000}"
 
-echo "Starting Ollama on ${OLLAMA_HOST}..."
-ollama serve &
-OLLAMA_PID=$!
+mkdir -p "${MODEL_DIR}"
+echo "Starting Python ChatBot with llama-cpp-python."
+echo "GGUF model: ${MODEL_REPO}/${MODEL_FILE}"
+echo "Model storage: ${MODEL_PATH}"
+echo "The model is downloaded to persistent storage and loaded by FastAPI on startup."
 
-cleanup() {
-  kill "$OLLAMA_PID" 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
-
-echo "Waiting for Ollama API..."
-for attempt in $(seq 1 90); do
-  if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then
-    break
-  fi
-  if ! kill -0 "$OLLAMA_PID" 2>/dev/null; then
-    echo "Ollama exited unexpectedly." >&2
-    exit 1
-  fi
-  sleep 2
-done
-
-if ! curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then
-  echo "Ollama did not become ready in time." >&2
-  exit 1
-fi
-
-echo "Ensuring model is available: ${OLLAMA_MODEL}"
-ollama pull "${OLLAMA_MODEL}"
-
-echo "Starting ChatBot web server on port ${PORT}..."
 exec uvicorn app:app --host 0.0.0.0 --port "${PORT}"
