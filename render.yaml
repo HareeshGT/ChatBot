@@ -7,9 +7,17 @@ services:
     dockerContext: .
     healthCheckPath: /api/health
     disk:
-      name: ollama-models
-      mountPath: /root/.ollama
+      name: chatbot-models
+      mountPath: /models
       sizeGB: 1
     envVars:
-      - key: OLLAMA_MODEL
-        value: qwen2.5:0.5b
+      - key: MODEL_REPO
+        value: Qwen/Qwen2.5-0.5B-Instruct-GGUF
+      - key: MODEL_FILE
+        value: qwen2.5-0.5b-instruct-q4_k_m.gguf
+      - key: MODEL_DIR
+        value: /models
+      - key: MODEL_PATH
+        value: /models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+      - key: LLAMA_THREADS
+        value: "4"
