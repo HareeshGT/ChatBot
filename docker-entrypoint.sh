@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-: "${OLLAMA_MODEL:=llama3.2:3b}"
+: "${OLLAMA_MODEL:=qwen2.5:0.5b}"
 : "${OLLAMA_HOST:=127.0.0.1:11434}"
 : "${PORT:=8000}"
 
