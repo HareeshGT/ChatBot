@@ -17,6 +17,124 @@ function scrollBottom() {
   $("conversation").scrollTop = $("conversation").scrollHeight;
 }
 
+// Build formatted output with DOM nodes (never inject model text as HTML).
+function appendInline(parent, source) {
+  const pattern = /(`[^`]+\`|\*\*[^*]+\*\*|\*[^*]+\*|https?:\/\/[^\s<]+)/g;
+  let cursor = 0;
+  for (const match of source.matchAll(pattern)) {
+    if (match.index > cursor) parent.append(document.createTextNode(source.slice(cursor, match.index)));
+    const token = match[0];
+    let node;
+    if (token.startsWith("`")) {
+      node = document.createElement("code");
+      node.textContent = token.slice(1, -1);
+    } else if (token.startsWith("**")) {
+      node = document.createElement("strong");
+      node.textContent = token.slice(2, -2);
+    } else if (token.startsWith("*")) {
+      node = document.createElement("em");
+      node.textContent = token.slice(1, -1);
+    } else {
+      node = document.createElement("a");
+      node.href = token;
+      node.target = "_blank";
+      node.rel = "noopener noreferrer";
+      node.textContent = token;
+    }
+    parent.append(node);
+    cursor = match.index + token.length;
+  }
+  if (cursor < source.length) parent.append(document.createTextNode(source.slice(cursor)));
+}
+
+function renderMarkdown(container, markdown) {
+  container.replaceChildren();
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+
+    if (/^\s*```/.test(line)) {
+      const language = line.trim().slice(3).trim();
+      i++;
+      const codeLines = [];
+      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) codeLines.push(lines[i++]);
+      if (i < lines.length) i++;
+      const wrapper = document.createElement("div");
+      wrapper.className = "code-block";
+      const toolbar = document.createElement("div");
+      toolbar.className = "code-toolbar";
+      const lang = document.createElement("span");
+      lang.textContent = language || "CODE";
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.className = "copy-code";
+      copy.textContent = "Copy";
+      const codeText = codeLines.join("\n");
+      copy.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(codeText);
+          copy.textContent = "Copied";
+          setTimeout(() => copy.textContent = "Copy", 1200);
+        } catch { copy.textContent = "Select to copy"; }
+      });
+      toolbar.append(lang, copy);
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      code.textContent = codeText;
+      if (language) code.className = "language-" + language.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+      pre.append(code);
+      wrapper.append(toolbar, pre);
+      container.append(wrapper);
+      continue;
+    }
+
+    const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const h = document.createElement("h" + heading[1].length);
+      appendInline(h, heading[2].replace(/\s+#+\s*$/, ""));
+      container.append(h); i++; continue;
+    }
+    if (/^\s*(---+|___+|\*\*\*+)\s*$/.test(line)) {
+      container.append(document.createElement("hr")); i++; continue;
+    }
+    if (/^\s*>/.test(line)) {
+      const quote = document.createElement("blockquote");
+      while (i < lines.length && /^\s*>/.test(lines[i])) {
+        const p = document.createElement("p");
+        appendInline(p, lines[i++].replace(/^\s*>\s?/, ""));
+        quote.append(p);
+      }
+      container.append(quote); continue;
+    }
+
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      const list = document.createElement(unordered ? "ul" : "ol");
+      while (i < lines.length) {
+        const item = lines[i].match(unordered ? /^\s*[-*+]\s+(.+)$/ : /^\s*\d+[.)]\s+(.+)$/);
+        if (!item) break;
+        const li = document.createElement("li");
+        appendInline(li, item[1]);
+        list.append(li); i++;
+      }
+      container.append(list); continue;
+    }
+
+    const paragraph = document.createElement("p");
+    appendInline(paragraph, line);
+    i++;
+    while (i < lines.length && lines[i].trim() &&
+      !/^\s*(```|#{1,6}\s|>|[-*+]\s+|\d+[.)]\s+|---+\s*$)/.test(lines[i])) {
+      paragraph.append(document.createElement("br"));
+      appendInline(paragraph, lines[i++]);
+    }
+    container.append(paragraph);
+  }
+}
+
 function addMessage(role, content = "", {streaming = false, error = false} = {}) {
   welcome.style.display = "none";
   messagesEl.classList.add("active");
@@ -32,7 +150,8 @@ function addMessage(role, content = "", {streaming = false, error = false} = {})
   label.textContent = role === "user" ? "You" : "Assistant";
   const text = document.createElement("div");
   text.className = "message-content" + (error ? " error" : "");
-  text.textContent = content;
+  if (role === "assistant" && !streaming && !error) renderMarkdown(text, content);
+  else text.textContent = content;
   body.append(label, text);
   if (streaming) {
     const cursor = document.createElement("span");
@@ -121,7 +240,7 @@ async function sendMessage(message) {
       if (item.error) throw new Error(item.error);
       if (item.message?.content) answer += item.message.content;
     }
-    assistantNode.textContent = answer || "(No response)";
+    renderMarkdown(assistantNode, answer || "(No response)");
     history.push({role: "user", content: trimmed}, {role: "assistant", content: answer});
   } catch (error) {
     assistantNode.textContent = error.message || "Something went wrong.";
