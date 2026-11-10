@@ -11,9 +11,13 @@ A self-hosted web chat application powered by [Ollama](https://ollama.com/). Oll
 - Persistent model storage using a Docker named volume.
 - No external AI API key or hosted inference service required.
 
+## Default model
+
+The default is `qwen2.5:0.5b`, a compact instruction-tuned model with an approximately **398 MB model download**. It is much smaller than the previous 3B model, though its answers will be less capable than larger models. See the [official Ollama model page](https://ollama.com/library/qwen2.5:0.5b-instruct).
+
 ## Run with Docker Compose (recommended)
 
-Requirements: Docker Engine/Desktop and the Docker Compose plugin. The first build downloads Ollama and Python dependencies. The first startup also downloads the configured model, so allow time and disk space for it.
+Requirements: Docker Engine/Desktop and the Docker Compose plugin. The first build downloads Ollama and Python dependencies. The first startup downloads the configured model; allow time and disk space for it.
 
 ```bash
 git clone https://github.com/HareeshGT/ChatBot.git
@@ -47,7 +51,7 @@ docker compose down -v
 Edit `.env` and set a model tag supported by Ollama, then recreate the service:
 
 ```env
-OLLAMA_MODEL=qwen2.5:3b
+OLLAMA_MODEL=qwen2.5:0.5b
 PORT=8000
 ```
 
@@ -55,10 +59,10 @@ PORT=8000
 docker compose up -d --build
 ```
 
-The configured model is pulled automatically on container startup. You can also pull another model from inside the running container:
+The configured model is checked/pulled at startup. If its files already exist in the persistent model directory, Ollama reuses them. You can also pull another model from inside the running container:
 
 ```bash
-docker exec -it local-ollama-chatbot ollama pull mistral
+docker exec -it local-ollama-chatbot ollama pull qwen2.5:1.5b
 ```
 
 The model selector refreshes from the models installed in Ollama when the page is loaded.
@@ -69,7 +73,7 @@ The model selector refreshes from the models installed in Ollama when the page i
 docker build -t local-ollama-chatbot .
 docker run -d --name local-ollama-chatbot \
   -p 8000:8000 \
-  -e OLLAMA_MODEL=llama3.2:3b \
+  -e OLLAMA_MODEL=qwen2.5:0.5b \
   -v ollama_data:/root/.ollama \
   --restart unless-stopped \
   local-ollama-chatbot
@@ -79,7 +83,7 @@ docker run -d --name local-ollama-chatbot \
 
 | Variable | Default | Description |
 |---|---|---|
-| `OLLAMA_MODEL` | `llama3.2:3b` | Model pulled at startup and used by default |
+| `OLLAMA_MODEL` | `qwen2.5:0.5b` | Model pulled at startup and used by default |
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Backend-to-Ollama URL (normally leave unchanged) |
 | `PORT` | `8000` | Web application port inside the container |
 | Compose `PORT` | `8000` | Host port exposed by Compose |
@@ -95,14 +99,18 @@ Example:
 ```bash
 curl -N http://localhost:8000/api/chat \
   -H 'Content-Type: application/json' \
-  -d '{"message":"Explain Docker in one paragraph","model":"llama3.2:3b","history":[]}'
+  -d '{"message":"Explain Docker in one paragraph","model":"qwen2.5:0.5b","history":[]}'
 ```
 
-## Hosting and resources
+## Deploy on Render
 
-Ollama performs inference on the host machine's resources available to the Docker container (CPU/RAM by default). Model files persist in the `ollama_data` named volume. Choose a model that fits the host's available memory and storage. Smaller quantized models are more practical on CPU-only machines; GPU acceleration depends on compatible host drivers and Docker runtime configuration.
+The included `render.yaml` deploys the **all-in-one Dockerfile** so Ollama and the web app run in the same Render service. It uses the compact `qwen2.5:0.5b` model, a paid Standard instance (2 GB RAM), and a 1 GB persistent disk mounted at `/root/.ollama` so model files survive restarts and redeploys.
 
-**Important:** this single-container setup is designed for a machine you control. Do not expose the web app to the public internet without adding authentication, HTTPS, request limits, and appropriate network controls. The Ollama API is bound to the container loopback and is not published as a host port.
+**Render Free is not suitable for this setup:** its 512 MB RAM and lack of persistent disks make an in-container Ollama model unreliable. The small model reduces memory and download needs, but does not remove that platform limitation.
+
+## Security
+
+Do not expose the web app to the public internet without adding authentication, HTTPS, request limits, and appropriate network controls. The Ollama API is bound to the container loopback and is not published as a host port.
 
 ## Troubleshooting
 
