@@ -188,7 +188,7 @@ async function loadModels() {
     for (const item of data.models || []) {
       const option = document.createElement("option");
       option.value = item.name;
-      option.textContent = item.name;
+      option.textContent = item.label || item.name;
       modelSelect.append(option);
     }
     if (data.default && [...modelSelect.options].some(o => o.value === data.default)) modelSelect.value = data.default;
