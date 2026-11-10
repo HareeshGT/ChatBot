@@ -29,7 +29,7 @@ function addMessage(role, content = "", {streaming = false, error = false} = {})
   body.className = "message-body";
   const label = document.createElement("div");
   label.className = "message-role";
-  label.textContent = role === "user" ? "You" : "Ollama";
+  label.textContent = role === "user" ? "You" : "Assistant";
   const text = document.createElement("div");
   text.className = "message-content" + (error ? " error" : "");
   text.textContent = content;
@@ -57,7 +57,7 @@ function clearChat() {
 async function loadModels() {
   try {
     const response = await fetch("/api/models");
-    if (!response.ok) throw new Error("Ollama unavailable");
+    if (!response.ok) throw new Error("Local model unavailable");
     const data = await response.json();
     modelSelect.replaceChildren();
     for (const item of data.models || []) {
@@ -72,10 +72,10 @@ async function loadModels() {
       option.textContent = "No models found";
       modelSelect.append(option);
     }
-    setStatus(true, "Ollama is running");
+    setStatus(true, "Python model is running");
   } catch {
     modelSelect.innerHTML = '<option>Unavailable</option>';
-    setStatus(false, "Ollama is unavailable");
+    setStatus(false, "Local model is unavailable");
   }
 }
 
