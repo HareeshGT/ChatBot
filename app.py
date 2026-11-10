@@ -241,7 +241,7 @@ def stream_local(messages: list[dict[str, str]]) -> Iterator[bytes]:
         # The context window must hold BOTH the prompt and generated answer.
         # Count prompt tokens and reserve space for chat-template overhead.
         with inference_lock:
-            prompt_text = "\\n".join(
+            prompt_text = "\n".join(
                 f"{item.get('role', 'user')}: {item.get('content', '')}" for item in messages
             )
             prompt_tokens = len(model.tokenize(prompt_text.encode("utf-8"), add_bos=True))
