@@ -20,4 +20,10 @@ services:
       - key: MODEL_PATH
         value: /models/qwen2.5-0.5b-instruct-q4_k_m.gguf
       - key: LLAMA_THREADS
-        value: "4"
+        value: "2"
+      - key: MAX_PROMPT_CHARS
+        value: "4500"
+      - key: MAX_HISTORY_MESSAGES
+        value: "8"
+      - key: MAX_GENERATION_TOKENS
+        value: "256"
