@@ -3,24 +3,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: local-ollama-chatbot
+    container_name: python-gguf-chatbot
     ports:
       - "${PORT:-8000}:8000"
     environment:
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:0.5b}
+      MODEL_REPO: ${MODEL_REPO:-Qwen/Qwen2.5-0.5B-Instruct-GGUF}
+      MODEL_FILE: ${MODEL_FILE:-qwen2.5-0.5b-instruct-q4_k_m.gguf}
+      MODEL_DIR: /models
+      MODEL_PATH: /models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+      LLAMA_THREADS: ${LLAMA_THREADS:-4}
       PORT: 8000
     volumes:
-      - ollama_data:/root/.ollama
+      - model_data:/models
     restart: unless-stopped
-    # For NVIDIA GPU acceleration, install NVIDIA Container Toolkit and
-    # uncomment the deploy reservation below.
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
 
 volumes:
-  ollama_data:
+  model_data:
