@@ -60,7 +60,7 @@ llm: Llama | None = None
 inference_lock = threading.Lock()
 
 
-GITHUB_URL_RE = __import__("re").compile(r"https?://(?:www\\.)?github\\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/tree/([^\\s?#]+))?(?:/[^\\s]*)?", __import__("re").IGNORECASE)
+GITHUB_URL_RE = __import__("re").compile(r"https?://(?:www\.)?github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/tree/([^\s?#]+))?(?:/[^\s]*)?", __import__("re").IGNORECASE)
 REPO_FILE_PRIORITY = (
     "README.md", "pyproject.toml", "requirements.txt", "package.json",
     "Dockerfile", "docker-compose.yml", "render.yaml",
@@ -105,7 +105,7 @@ async def inspect_github_repository(message: str) -> str | None:
             source_ext = (".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".java", ".yaml", ".yml", ".toml")
             for path in paths:
                 low = path.lower()
-                if len(selected) >= 10:
+                if len(selected) >= 6:
                     break
                 if low.endswith(source_ext) and not any(part in low for part in ("/node_modules/", "/.git/", "/dist/", "/build/")):
                     if path not in selected:
@@ -122,7 +122,7 @@ async def inspect_github_repository(message: str) -> str | None:
             ]
             total = sum(len(x) for x in chunks)
             for path in selected:
-                if total > 18000:
+                if total > 7000:
                     break
                 file_response = await client.get(
                     f"{api}/repos/{owner}/{repo_name}/contents/{path}",
@@ -135,16 +135,16 @@ async def inspect_github_repository(message: str) -> str | None:
                     continue
                 import base64
                 content = base64.b64decode(item["content"]).decode("utf-8", errors="replace")
-                content = content[:4500]
-                section = f"\\n--- FILE: {path} ---\\n{content}"
+                content = content[:1200]
+                section = f"\n--- FILE: {path} ---\n{content}"
                 chunks.append(section)
                 total += len(section)
             chunks.append(
-                "\\nINSTRUCTIONS: Use only this fetched repository evidence for claims about its implementation. "
+                "\nINSTRUCTIONS: Use only this fetched repository evidence for claims about its implementation. "
                 "If a needed file was not fetched, say so and request the specific path or inspect it before making claims. "
                 "Do not claim to have modified, committed, deployed, or tested anything; this chat backend currently has read-only repository inspection."
             )
-            return "\\n".join(chunks)
+            return "\n".join(chunks)
     except Exception as exc:
         print(f"GitHub repository inspection error for {owner}/{repo_name}: {exc}", flush=True)
         return f"GitHub repository inspection could not be completed for {owner}/{repo_name}: {type(exc).__name__}. Do not invent repository details."
