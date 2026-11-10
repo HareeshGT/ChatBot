@@ -22,15 +22,18 @@ A FastAPI web chatbot with a **local Qwen GGUF model selected by default**, plus
 
 Provider model names can be changed using the corresponding `*_MODEL` environment variable. The custom endpoint must implement the OpenAI-compatible `/chat/completions` streaming API. Anthropic uses its native Messages streaming API.
 
-## Configure API keys on Render
+## Configure providers from the chat UI (recommended for personal use)
 
-1. Open the [Render dashboard](https://dashboard.render.com/) and select `chatbot-web`.
-2. Open **Environment**.
-3. Add only the provider variables you need, such as `GROQ_API_KEY` or `GEMINI_API_KEY`.
-4. Optionally set the matching model variable.
-5. Save changes and redeploy/restart the service. The provider appears in the model dropdown after the restart.
+1. Open the chatbot and click **＋ Add model**.
+2. Select a provider, paste your API key, and enter the model ID (the default field value is a suggested model).
+3. For a custom provider, also enter its HTTPS OpenAI-compatible API base URL.
+4. Click **Save model**. Select the newly added model from the top model dropdown.
 
-Do not commit real API keys to GitHub, put them in `.env.example`, or expose them in browser JavaScript. Keys configured in Render are shared by users of this deployed service; this app does not currently provide per-user key vaults or authentication.
+UI-entered credentials are held in browser session storage and are sent to the backend only with requests to that provider. They are not persisted on the server. Do not use this on a shared or untrusted device. The app currently has no user authentication; add authentication before making a public multi-user service.
+
+## Configure shared server-side keys (alternative)
+
+You can still add provider environment variables in the [Render dashboard](https://dashboard.render.com/) under `chatbot-web` → **Environment**. These server-side keys are shared by everyone who can access the deployed app. Never commit real API keys to GitHub or put them in `.env.example`.
 
 ## Local GGUF model
 
