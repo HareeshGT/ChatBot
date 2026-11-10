@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     OLLAMA_HOST=127.0.0.1:11434 \
     OLLAMA_MODELS=/root/.ollama/models \
-    OLLAMA_MODEL=llama3.2:3b \
+    OLLAMA_MODEL=qwen2.5:0.5b \
     PORT=8000
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl bash && \
