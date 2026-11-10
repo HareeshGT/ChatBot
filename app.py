@@ -35,14 +35,14 @@ def build_messages(history: list[dict[str, str]], current_message: str) -> list[
     remaining = max(0, MAX_PROMPT_CHARS - len(current))
     recent: list[dict[str, str]] = []
 
-    for item in history[-MAX_HISTORY_MESSAGES:]:
+    for item in reversed(history[-MAX_HISTORY_MESSAGES:]):
         role, content = item.get("role"), item.get("content")
         if role not in {"user", "assistant"} or not isinstance(content, str) or not content.strip():
             continue
         content = content.strip()
         if remaining <= 0:
             break
-        # Preserve the newest history first; older messages are dropped when the budget is used.
+        # Walk backwards so the newest turns consume the budget first.
         content = content[-remaining:]
         recent.append({"role": role, "content": content})
         remaining -= len(content)
