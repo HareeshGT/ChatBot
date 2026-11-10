@@ -11,7 +11,7 @@ The included `render.yaml` sets:
 - Persistent disk: 1 GB mounted at `/models`
 - Model repository: `Qwen/Qwen2.5-0.5B-Instruct-GGUF`
 - Model file: `qwen2.5-0.5b-instruct-q4_k_m.gguf`
-- CPU threads: 4
+- CPU threads: 2 (conservative starting point; tune using Render metrics)
 
 The GGUF file is approximately 491 MB. The disk stores the file across restarts and redeploys; the model is loaded into RAM when the app starts. The persistent disk must be mounted at `/models` because that is the configured model directory.
 
@@ -30,14 +30,19 @@ The GGUF file is approximately 491 MB. The disk stores the file across restarts 
 - `MODEL_FILE`: GGUF filename in that repository.
 - `MODEL_DIR`: model directory, default `/models`.
 - `MODEL_PATH`: full path to the GGUF file.
-- `LLAMA_THREADS`: CPU threads, default 4.
+- `LLAMA_THREADS`: CPU inference threads; Blueprint starts at 2.
 - `LLAMA_CONTEXT_SIZE`: context window, default 2048.
+- `MAX_PROMPT_CHARS`: combined character budget for current message and recent history; Blueprint sets 4500.
+- `MAX_HISTORY_MESSAGES`: maximum prior messages considered; Blueprint sets 8.
+- `MAX_GENERATION_TOKENS`: generation cap; Blueprint sets 256 to reduce long CPU generations.
 - `PORT`: provided by Render.
+
+The application logs model startup duration and, for each completed chat, time to first generated token, total inference time, stream chunk count, and prompt character count. Use these measurements to distinguish slow prompt processing from slow token generation.
 
 If you change `MODEL_FILE`, update `MODEL_PATH` to the same filename. Choose a compatible GGUF model supported by llama.cpp.
 
 ## Notes
 
 - Render Free is not recommended: local inference needs RAM for model weights, context cache, and Python runtime, and the model should be kept on persistent storage.
-- CPU inference performance depends on the instance. Increasing thread count does not always improve speed.
+- CPU inference performance depends on the instance. Increasing thread count does not always improve speed. The prompt budget prevents conversation history from growing without bound, which is important for this small 2048-token context model.
 - The API currently has no authentication; add access controls before using it for a public-facing service.
