@@ -4,21 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#10131a">
-  <title>Local Ollama Chat</title>
+  <title>Local Python Chat</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   <main class="shell">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">✳</span><div><strong>Local Chat</strong><small>Powered by Ollama</small></div></div>
+      <div class="brand"><span class="brand-mark">✳</span><div><strong>Local Chat</strong><small>Powered by llama.cpp</small></div></div>
       <button id="newChat" class="new-chat">＋ <span>New chat</span></button>
-      <div class="side-note"><span class="pulse"></span><span id="statusText">Connecting to Ollama…</span></div>
-      <div class="sidebar-footer">Your prompts stay on the machine hosting this app.</div>
+      <div class="side-note"><span class="pulse"></span><span id="statusText">Loading local model…</span></div>
+      <div class="sidebar-footer">Your prompts are processed by the model running in this app.</div>
     </aside>
     <section class="main">
       <header class="topbar">
         <div class="mobile-brand">✳ Local Chat</div>
-        <div class="model-wrap"><label for="modelSelect">MODEL</label><select id="modelSelect"><option>Loading models…</option></select></div>
+        <div class="model-wrap"><label for="modelSelect">MODEL</label><select id="modelSelect"><option>Loading model…</option></select></div>
         <button id="clearBtn" class="icon-btn" title="Clear conversation" aria-label="Clear conversation">↻</button>
       </header>
       <div id="conversation" class="conversation">
