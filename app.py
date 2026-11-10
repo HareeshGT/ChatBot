@@ -60,7 +60,7 @@ llm: Llama | None = None
 inference_lock = threading.Lock()
 
 
-GITHUB_URL_RE = __import__("re").compile(r"https?://(?:www\.)?github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/tree/([^\s?#]+))?(?:/[^\s]*)?", __import__("re").IGNORECASE)
+GITHUB_URL_RE = __import__("re").compile(r"https?://(?:www\.)?github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/tree/([A-Za-z0-9._-]+))?(?:/[^\s]*)?", __import__("re").IGNORECASE)
 REPO_FILE_PRIORITY = (
     "README.md", "pyproject.toml", "requirements.txt", "package.json",
     "Dockerfile", "docker-compose.yml", "render.yaml",
