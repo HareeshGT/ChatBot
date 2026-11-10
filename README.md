@@ -1,29 +1,44 @@
-# Python GGUF ChatBot
+# Local-first AI ChatBot
 
-A self-hosted web chatbot powered by **llama-cpp-python** and a local GGUF model. The FastAPI app loads the model directly into Python; there is no Ollama server and no external inference API.
+A FastAPI web chatbot with a **local Qwen GGUF model selected by default**, plus optional cloud providers: OpenAI, Groq, Mistral, Google Gemini, Anthropic, and a custom OpenAI-compatible endpoint.
 
-## Features
+## How model selection works
 
-- Responsive chat interface with streaming responses.
-- Python-native inference through llama-cpp-python.
-- Qwen 2.5 0.5B Instruct in Q4_K_M GGUF quantization.
-- Conversation history passed to the model on each turn.
-- Model downloaded once to a persistent model directory.
-- Existing FastAPI endpoints and newline-delimited JSON streaming contract retained.
-- No API key or hosted AI inference service required.
+- **Local · Qwen** is always the default. It runs inside this app with llama-cpp-python; no API key or external inference service is needed.
+- Cloud providers appear in the model selector only when their server-side API key is configured.
+- Select a provider from the dropdown to route the next prompt to that provider. Switch back to Local at any time.
+- API keys are read only by the backend from environment variables. They are never sent to the browser or returned by the models endpoint.
 
-## Default model
+## Supported providers
+
+| Provider | Environment key | Default model |
+|---|---|---|
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| Groq | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
+| Mistral | `MISTRAL_API_KEY` | `mistral-small-latest` |
+| Google Gemini | `GEMINI_API_KEY` | `gemini-2.5-flash` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-3-5-haiku-latest` |
+| Custom | `CUSTOM_API_KEY` + `CUSTOM_API_BASE` + `CUSTOM_MODEL_NAME` | User-defined |
+
+Provider model names can be changed using the corresponding `*_MODEL` environment variable. The custom endpoint must implement the OpenAI-compatible `/chat/completions` streaming API. Anthropic uses its native Messages streaming API.
+
+## Configure API keys on Render
+
+1. Open the [Render dashboard](https://dashboard.render.com/) and select `chatbot-web`.
+2. Open **Environment**.
+3. Add only the provider variables you need, such as `GROQ_API_KEY` or `GEMINI_API_KEY`.
+4. Optionally set the matching model variable.
+5. Save changes and redeploy/restart the service. The provider appears in the model dropdown after the restart.
+
+Do not commit real API keys to GitHub, put them in `.env.example`, or expose them in browser JavaScript. Keys configured in Render are shared by users of this deployed service; this app does not currently provide per-user key vaults or authentication.
+
+## Local GGUF model
 
 - Repository: [Qwen/Qwen2.5-0.5B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF)
 - File: `qwen2.5-0.5b-instruct-q4_k_m.gguf`
-- Quantization: Q4_K_M
-- File size: approximately 491 MB.
-
-This is a compact model intended for CPU inference. It is much smaller than 3B models, but responses and reasoning are less capable than larger models. CPU speed depends on the Render instance's available compute.
+- Downloaded to `/models` and reused from persistent storage.
 
 ## Run with Docker Compose
-
-Requirements: Docker Engine/Desktop and Docker Compose. The first build compiles the CPU backend for llama-cpp-python; this may take several minutes. The first app startup downloads the GGUF model to the persistent volume and loads it into memory.
 
 ```bash
 git clone https://github.com/HareeshGT/ChatBot.git
@@ -32,74 +47,28 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Open **http://localhost:8000**.
+Open http://localhost:8000. Add optional keys to your local `.env` file to enable cloud providers.
 
-Follow logs:
+## Environment variables
 
-```bash
-docker compose logs -f chatbot
-```
+| Variable | Purpose |
+|---|---|
+| `DEFAULT_MODEL` | Defaults to `local`; may be set to an enabled provider model ID |
+| `OPENAI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY` | Enable the corresponding provider |
+| `OPENAI_MODEL`, `GROQ_MODEL`, `MISTRAL_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL` | Override provider model IDs |
+| `CUSTOM_API_BASE` | Base URL for custom OpenAI-compatible API, without `/chat/completions` |
+| `CUSTOM_API_KEY` | Custom provider key |
+| `CUSTOM_MODEL_NAME` | Model identifier sent to custom endpoint |
+| `CUSTOM_MODEL_LABEL` | Friendly label shown in dropdown |
+| `MODEL_REPO`, `MODEL_FILE`, `MODEL_DIR`, `MODEL_PATH` | Local GGUF location |
+| `LLAMA_THREADS`, `LLAMA_CONTEXT_SIZE` | Local inference tuning |
 
-Stop the service while keeping the downloaded model:
+## API
 
-```bash
-docker compose down
-```
-
-Remove the service and its downloaded model volume:
-
-```bash
-docker compose down -v
-```
-
-## Configuration
-
-| Variable | Default | Description |
-|---|---|---|
-| `MODEL_REPO` | `Qwen/Qwen2.5-0.5B-Instruct-GGUF` | Hugging Face repository |
-| `MODEL_FILE` | `qwen2.5-0.5b-instruct-q4_k_m.gguf` | GGUF filename |
-| `MODEL_DIR` | `/models` | Model directory; mount persistent storage here |
-| `MODEL_PATH` | `/models/qwen2.5-0.5b-instruct-q4_k_m.gguf` | Full model path |
-| `LLAMA_THREADS` | `4` | CPU inference threads |
-| `LLAMA_CONTEXT_SIZE` | `2048` | Context window size |
-| `PORT` | `8000` | Web server port |
-
-Change model repository/file only if they refer to a compatible GGUF model. If changing the file, update `MODEL_PATH` to match.
-
-## API endpoints
-
-- `GET /api/health` — app and model readiness.
-- `GET /api/models` — the configured model exposed to the frontend selector.
-- `POST /api/chat` — streams newline-delimited JSON with `message.content` chunks, preserving the existing frontend contract.
-
-Example:
-
-```bash
-curl -N http://localhost:8000/api/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"Explain Docker in one paragraph","history":[]}'
-```
-
-## Deploy on Render
-
-The included `render.yaml` deploys the main Dockerfile and mounts a **1 GB persistent disk at `/models`**. It uses a Standard web service plan as a starting point for CPU inference and model memory. Review Render's current plan limits and pricing before deploying.
-
-1. Open the [Render dashboard](https://dashboard.render.com/).
-2. Create/update a Blueprint from this repository and review `render.yaml`.
-3. Confirm the service uses `./Dockerfile`, has the persistent disk mounted at `/models`, and has enough RAM for the model plus the Python process.
-4. Deploy. The first startup downloads the GGUF model and loads it; later starts reuse the persistent file.
-5. Check `https://YOUR-SERVICE.onrender.com/api/health`. A healthy response includes `"engine":"llama-cpp-python"`.
-
-Render Free is not recommended for this configuration: its resource limits and lack of persistent disks can make local model inference unreliable. A small model still requires memory for the model, context/KV cache, and runtime.
-
-## Troubleshooting
-
-- Check logs in Render or run `docker compose logs -f chatbot`.
-- Health endpoint: `curl http://localhost:8000/api/health`.
-- If startup fails during model download, verify outbound access to Hugging Face and available disk space.
-- If the model fails to load, verify the repository/file pair and ensure the service has sufficient memory.
-- The first Docker build may take time because llama-cpp-python's CPU backend is compiled during image build.
+- `GET /api/health` — local model readiness and provider count.
+- `GET /api/models` — configured model choices (never includes API keys).
+- `POST /api/chat` — streams newline-delimited JSON with the same `message.content` contract for local and cloud models.
 
 ## Security
 
-The API does not include authentication. Before exposing it publicly, add authentication, request limits, and appropriate access controls. Prompts are processed locally by the running container, but the model file is downloaded from Hugging Face on initial startup.
+This app currently has no user authentication. Anyone who can access the public chat can use any provider keys configured on the server and incur charges. Put the app behind authentication or add user access controls before sharing it publicly. Provider prompts are sent to the selected third-party provider; only Local keeps inference inside this app.
