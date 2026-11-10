@@ -12,6 +12,21 @@ services:
       MODEL_DIR: /models
       MODEL_PATH: /models/qwen2.5-0.5b-instruct-q4_k_m.gguf
       LLAMA_THREADS: ${LLAMA_THREADS:-4}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-local}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      MISTRAL_MODEL: ${MISTRAL_MODEL:-mistral-small-latest}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-3-5-haiku-latest}
+      CUSTOM_API_BASE: ${CUSTOM_API_BASE:-}
+      CUSTOM_API_KEY: ${CUSTOM_API_KEY:-}
+      CUSTOM_MODEL_NAME: ${CUSTOM_MODEL_NAME:-}
+      CUSTOM_MODEL_LABEL: ${CUSTOM_MODEL_LABEL:-Custom API model}
       PORT: 8000
     volumes:
       - model_data:/models
