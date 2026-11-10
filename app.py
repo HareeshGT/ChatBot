@@ -238,9 +238,28 @@ def stream_local(messages: list[dict[str, str]]) -> Iterator[bytes]:
     started = time.perf_counter()
     first_token_at = None
     try:
+        # The context window must hold BOTH the prompt and generated answer.
+        # Count prompt tokens and reserve space for chat-template overhead.
         with inference_lock:
+            prompt_text = "\\n".join(
+                f"{item.get('role', 'user')}: {item.get('content', '')}" for item in messages
+            )
+            prompt_tokens = len(model.tokenize(prompt_text.encode("utf-8"), add_bos=True))
+            safety_margin = 128
+            available_for_output = CONTEXT_SIZE - prompt_tokens - safety_margin
+            output_tokens = min(LOCAL_MAX_GENERATION_TOKENS, available_for_output)
+            if output_tokens < 32:
+                yield ndjson({
+                    "error": f"This prompt is too long for the local model's {CONTEXT_SIZE}-token context window. "
+                    "Shorten the prompt or conversation, remove the repository context, or select a cloud model."
+                })
+                return
+            print(
+                f"Local token budget: prompt={prompt_tokens}, output={output_tokens}, context={CONTEXT_SIZE}",
+                flush=True,
+            )
             for chunk in model.create_chat_completion(
-                messages=messages, stream=True, max_tokens=LOCAL_MAX_GENERATION_TOKENS, temperature=0.7,
+                messages=messages, stream=True, max_tokens=output_tokens, temperature=0.7,
             ):
                 content = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content")
                 if content:
