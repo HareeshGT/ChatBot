@@ -19,6 +19,7 @@
       <header class="topbar">
         <div class="mobile-brand">✳ Local Chat</div>
         <div class="model-wrap"><label for="modelSelect">MODEL</label><select id="modelSelect"><option>Loading models…</option></select></div>
+        <button id="settingsBtn" class="settings-btn" type="button">＋ Add model</button>
         <button id="clearBtn" class="icon-btn" title="Clear conversation" aria-label="Clear conversation">↻</button>
       </header>
       <div id="conversation" class="conversation">
@@ -44,6 +45,24 @@
       </form>
     </section>
   </main>
+  <div id="modelModal" class="modal-backdrop" hidden>
+    <section class="model-modal" role="dialog" aria-modal="true" aria-labelledby="modelModalTitle">
+      <div class="modal-heading"><div><p class="eyebrow">MODEL SETTINGS</p><h2 id="modelModalTitle">Connect an AI provider</h2></div><button id="closeModelModal" class="icon-btn" type="button" aria-label="Close">×</button></div>
+      <p class="modal-copy">Choose a provider, enter your API key and model ID. Credentials stay in this browser session and are sent only when you use that model.</p>
+      <label for="providerInput">Provider</label>
+      <select id="providerInput" class="modal-field">
+        <option value="openai">OpenAI</option><option value="groq">Groq</option><option value="gemini">Google Gemini</option><option value="mistral">Mistral</option><option value="anthropic">Anthropic</option><option value="custom">Custom OpenAI-compatible API</option>
+      </select>
+      <label for="apiKeyInput">API key</label>
+      <input id="apiKeyInput" class="modal-field" type="password" autocomplete="off" placeholder="Paste your API key">
+      <label for="providerModelInput">Model ID</label>
+      <input id="providerModelInput" class="modal-field" type="text" placeholder="Provider model identifier">
+      <div id="customBaseRow" hidden><label for="apiBaseInput">API base URL</label><input id="apiBaseInput" class="modal-field" type="url" placeholder="https://your-endpoint/v1"></div>
+      <p id="modelModalError" class="modal-error" aria-live="polite"></p>
+      <div class="modal-actions"><button id="cancelModel" class="secondary-btn" type="button">Cancel</button><button id="saveModel" class="settings-btn" type="button">Save model</button></div>
+      <p class="security-note">Keys are kept in session storage, not sent to GitHub or saved as Render environment variables. Use this only over HTTPS on a trusted device.</p>
+    </section>
+  </div>
   <script src="/static/app.js" defer></script>
 </body>
 </html>
