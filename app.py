@@ -110,6 +110,10 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20000)
     model: str | None = None
     history: list[dict[str, str]] = Field(default_factory=list)
+    provider: str | None = None
+    api_key: str | None = Field(default=None, max_length=1000)
+    api_base: str | None = Field(default=None, max_length=500)
+    provider_model: str | None = Field(default=None, max_length=200)
 
 
 def available_models():
@@ -256,18 +260,24 @@ async def chat(payload: ChatRequest):
         if llm is None:
             raise HTTPException(status_code=503, detail="Local model is not loaded")
         return StreamingResponse(stream_local(messages), media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-    for provider, config in PROVIDERS.items():
-        model_name = selected.removeprefix(provider + ":")
-        if selected.startswith(provider + ":"):
-            api_key = os.getenv(config["key"], "")
-            if not api_key:
-                raise HTTPException(status_code=400, detail=f"{config['label']} is not configured on the server")
-            generator = stream_anthropic(model_name, api_key, messages) if provider == "anthropic" else stream_openai_compatible(config["base"], api_key, model_name, messages)
-            return StreamingResponse(generator, media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-    if selected.startswith("custom:") and CUSTOM_API_KEY and CUSTOM_API_BASE:
-        model_name = selected.split(":", 1)[1]
-        return StreamingResponse(stream_openai_compatible(CUSTOM_API_BASE, CUSTOM_API_KEY, model_name, messages), media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-    raise HTTPException(status_code=400, detail="Unknown or unavailable model. Refresh the model list.")
+    provider = (payload.provider or "").lower()
+    if not provider and ":" in selected:
+        provider = selected.split(":", 1)[0].lower()
+    if provider in PROVIDERS or provider == "custom":
+        config = PROVIDERS.get(provider, {})
+        model_name = (payload.provider_model or selected.split(":", 1)[-1]).strip()
+        api_key = (payload.api_key or os.getenv(config.get("key", ""), "")).strip()
+        if not api_key:
+            raise HTTPException(status_code=400, detail="Add an API key in Model settings before using this provider.")
+        if provider == "anthropic":
+            generator = stream_anthropic(model_name, api_key, messages)
+        else:
+            base_url = (payload.api_base or config.get("base") or CUSTOM_API_BASE).strip().rstrip("/")
+            if provider == "custom" and not base_url:
+                raise HTTPException(status_code=400, detail="Add an API base URL in Model settings.")
+            generator = stream_openai_compatible(base_url, api_key, model_name, messages)
+        return StreamingResponse(generator, media_type="application/x-ndjson", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    raise HTTPException(status_code=400, detail="Unknown model. Select Local or configure a provider in Model settings.")
 
 
 if __name__ == "__main__":
