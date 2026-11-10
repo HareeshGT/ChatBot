@@ -1,18 +1,75 @@
+import asyncio
 import json
 import os
-from typing import AsyncIterator
+import threading
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Iterator
 
-import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from huggingface_hub import hf_hub_download
+from llama_cpp import Llama
 from pydantic import BaseModel, Field
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
-DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
-TIMEOUT = httpx.Timeout(connect=10.0, read=None, write=60.0, pool=10.0)
+MODEL_REPO = os.getenv("MODEL_REPO", "Qwen/Qwen2.5-0.5B-Instruct-GGUF")
+MODEL_FILE = os.getenv("MODEL_FILE", "qwen2.5-0.5b-instruct-q4_k_m.gguf")
+MODEL_DIR = Path(os.getenv("MODEL_DIR", "/models"))
+MODEL_PATH = Path(os.getenv("MODEL_PATH", str(MODEL_DIR / MODEL_FILE)))
+MODEL_NAME = MODEL_FILE
+LLAMA_THREADS = max(1, int(os.getenv("LLAMA_THREADS", str(min(os.cpu_count() or 2, 4)))))
+CONTEXT_SIZE = max(512, int(os.getenv("LLAMA_CONTEXT_SIZE", "2048")))
 
-app = FastAPI(title="Local Ollama ChatBot")
+llm: Llama | None = None
+inference_lock = threading.Lock()
+
+
+def load_model() -> Llama:
+    """Download the configured GGUF once into persistent storage and load it."""
+    global MODEL_PATH
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+    if not MODEL_PATH.is_file():
+        print(f"Downloading GGUF model {MODEL_REPO}/{MODEL_FILE} into {MODEL_DIR}", flush=True)
+        downloaded_path = hf_hub_download(
+            repo_id=MODEL_REPO,
+            filename=MODEL_FILE,
+            local_dir=str(MODEL_DIR),
+        )
+        MODEL_PATH = Path(downloaded_path)
+
+    if not MODEL_PATH.is_file():
+        raise RuntimeError(f"GGUF model file was not found at {MODEL_PATH}")
+
+    print(f"Loading GGUF model from {MODEL_PATH}", flush=True)
+    model = Llama(
+        model_path=str(MODEL_PATH),
+        n_ctx=CONTEXT_SIZE,
+        n_threads=LLAMA_THREADS,
+        n_batch=256,
+        verbose=False,
+    )
+    # Fail early if the model cannot run, rather than serving a misleading healthy status.
+    model.create_chat_completion(
+        messages=[{"role": "user", "content": "Reply with OK."}],
+        max_tokens=4,
+        temperature=0,
+    )
+    print("GGUF model loaded and warm-up completed.", flush=True)
+    return model
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global llm
+    # Downloading and loading are blocking native operations; keep them off the event loop.
+    llm = await asyncio.to_thread(load_model)
+    yield
+    llm = None
+
+
+app = FastAPI(title="Python GGUF ChatBot", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -29,60 +86,59 @@ async def index():
 
 @app.get("/api/health")
 async def health():
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            response = await client.get(f"{OLLAMA_URL}/api/tags")
-            response.raise_for_status()
-            data = response.json()
-        return {"status": "ok", "ollama": "connected", "model": DEFAULT_MODEL,
-                "models": [item.get("name") for item in data.get("models", [])]}
-    except (httpx.HTTPError, ValueError):
-        raise HTTPException(status_code=503, detail="Ollama is not reachable")
+    if llm is None:
+        raise HTTPException(status_code=503, detail="GGUF model is not loaded")
+    return {
+        "status": "ok",
+        "engine": "llama-cpp-python",
+        "model": MODEL_NAME,
+        "models": [MODEL_NAME],
+    }
 
 
 @app.get("/api/models")
 async def models():
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(f"{OLLAMA_URL}/api/tags")
-            response.raise_for_status()
-            return {"models": response.json().get("models", []), "default": DEFAULT_MODEL}
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=503, detail=f"Cannot reach Ollama: {exc}") from exc
+    if llm is None:
+        raise HTTPException(status_code=503, detail="GGUF model is not loaded")
+    return {"models": [{"name": MODEL_NAME}], "default": MODEL_NAME}
 
 
 @app.post("/api/chat")
 async def chat(payload: ChatRequest):
-    model = (payload.model or DEFAULT_MODEL).strip()
-    if not model:
-        raise HTTPException(status_code=400, detail="A model is required")
+    model = llm
+    if model is None:
+        raise HTTPException(status_code=503, detail="GGUF model is not loaded")
 
+    # Keep the existing frontend contract: stream newline-delimited JSON chunks
+    # shaped like Ollama's {message:{content:...}, done:...} response.
     messages: list[dict[str, str]] = []
-    # Only accept valid role/content pairs from the client history.
     for item in payload.history[-40:]:
         role, content = item.get("role"), item.get("content")
         if role in {"user", "assistant"} and isinstance(content, str) and content.strip():
             messages.append({"role": role, "content": content[:20000]})
     messages.append({"role": "user", "content": payload.message})
 
-    async def stream() -> AsyncIterator[bytes]:
+    def stream() -> Iterator[bytes]:
         try:
-            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-                async with client.stream(
-                    "POST",
-                    f"{OLLAMA_URL}/api/chat",
-                    json={"model": model, "messages": messages, "stream": True},
-                ) as response:
-                    if response.status_code >= 400:
-                        body = await response.aread()
-                        detail = body.decode("utf-8", errors="replace")
-                        yield (json.dumps({"error": f"Ollama returned {response.status_code}: {detail}"}) + "\n").encode()
-                        return
-                    async for line in response.aiter_lines():
-                        if line:
-                            yield (line + "\n").encode()
-        except httpx.HTTPError as exc:
-            yield (json.dumps({"error": f"Could not connect to Ollama: {exc}"}) + "\n").encode()
+            with inference_lock:
+                chunks = model.create_chat_completion(
+                    messages=messages,
+                    stream=True,
+                    max_tokens=512,
+                    temperature=0.7,
+                )
+                for chunk in chunks:
+                    choice = (chunk.get("choices") or [{}])[0]
+                    content = (choice.get("delta") or {}).get("content")
+                    if content:
+                        item = {
+                            "message": {"role": "assistant", "content": content},
+                            "done": False,
+                        }
+                        yield (json.dumps(item, ensure_ascii=False) + "\n").encode("utf-8")
+                yield (json.dumps({"message": {"role": "assistant", "content": ""}, "done": True}) + "\n").encode("utf-8")
+        except Exception as exc:
+            yield (json.dumps({"error": f"Local model inference failed: {exc}"}, ensure_ascii=False) + "\n").encode("utf-8")
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
 
