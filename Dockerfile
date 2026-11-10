@@ -1,27 +1,33 @@
 FROM python:3.12-slim
 
-ARG OLLAMA_VERSION=0.12.6
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    OLLAMA_HOST=127.0.0.1:11434 \
-    OLLAMA_MODELS=/root/.ollama/models \
-    OLLAMA_MODEL=qwen2.5:0.5b \
-    PORT=8000
+    MODEL_REPO=Qwen/Qwen2.5-0.5B-Instruct-GGUF \
+    MODEL_FILE=qwen2.5-0.5b-instruct-q4_k_m.gguf \
+    MODEL_DIR=/models \
+    MODEL_PATH=/models/qwen2.5-0.5b-instruct-q4_k_m.gguf \
+    LLAMA_THREADS=4 \
+    PORT=8000 \
+    CMAKE_ARGS="-DGGML_NATIVE=OFF -DGGML_OPENMP=ON" \
+    FORCE_CMAKE=1
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl bash && \
-    rm -rf /var/lib/apt/lists/* && \
-    curl -fsSL https://ollama.com/install.sh | sh
+# llama-cpp-python builds its CPU inference backend from source.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential cmake ninja-build ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    apt-get purge -y --auto-remove build-essential cmake ninja-build && \
+    rm -rf /root/.cache/pip
 
 COPY app.py .
 COPY static ./static
 COPY docker-entrypoint.sh .
-RUN chmod +x docker-entrypoint.sh && mkdir -p /root/.ollama
+RUN chmod +x docker-entrypoint.sh && mkdir -p /models
 
 EXPOSE 8000
-VOLUME ["/root/.ollama"]
+VOLUME ["/models"]
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
