@@ -6,6 +6,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Iterator
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -57,6 +58,96 @@ CUSTOM_MODEL_LABEL = os.getenv("CUSTOM_MODEL_LABEL", "Custom API model")
 
 llm: Llama | None = None
 inference_lock = threading.Lock()
+
+
+GITHUB_URL_RE = __import__("re").compile(r"https?://(?:www\\.)?github\\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/tree/([^\\s?#]+))?(?:/[^\\s]*)?", __import__("re").IGNORECASE)
+REPO_FILE_PRIORITY = (
+    "README.md", "pyproject.toml", "requirements.txt", "package.json",
+    "Dockerfile", "docker-compose.yml", "render.yaml",
+    "app.py", "main.py", "server.py", "index.js", "src/index.ts",
+)
+
+
+async def inspect_github_repository(message: str) -> str | None:
+    """Fetch real public GitHub repository metadata, tree and key source files."""
+    match = GITHUB_URL_RE.search(message)
+    if not match:
+        return None
+    owner, repo_name, branch = match.groups()
+    repo_name = repo_name.removesuffix(".git")
+    if repo_name in {".", ".."}:
+        return None
+    api = "https://api.github.com"
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    timeout = httpx.Timeout(20.0, connect=8.0)
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            meta_response = await client.get(f"{api}/repos/{owner}/{repo_name}", headers=headers)
+            if meta_response.status_code == 404:
+                return f"GitHub repository inspection failed: {owner}/{repo_name} was not found or is private. Do not guess its contents."
+            meta_response.raise_for_status()
+            meta = meta_response.json()
+            branch = branch or meta.get("default_branch", "main")
+            tree_response = await client.get(
+                f"{api}/repos/{owner}/{repo_name}/git/trees/{branch}?recursive=1", headers=headers
+            )
+            tree_response.raise_for_status()
+            tree_data = tree_response.json()
+            paths = [item["path"] for item in tree_data.get("tree", []) if item.get("type") == "blob"]
+            if not paths:
+                return f"GitHub repository {owner}/{repo_name} exists but its file tree is empty or unavailable."
+            selected = []
+            for priority in REPO_FILE_PRIORITY:
+                found = next((p for p in paths if p.lower() == priority.lower()), None)
+                if found and found not in selected:
+                    selected.append(found)
+            # Add likely source/config files so repo analysis is not based on README alone.
+            source_ext = (".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".java", ".yaml", ".yml", ".toml")
+            for path in paths:
+                low = path.lower()
+                if len(selected) >= 10:
+                    break
+                if low.endswith(source_ext) and not any(part in low for part in ("/node_modules/", "/.git/", "/dist/", "/build/")):
+                    if path not in selected:
+                        selected.append(path)
+            chunks = [
+                f"VERIFIED GITHUB REPOSITORY CONTEXT",
+                f"Repository: {meta.get('html_url')}",
+                f"Description: {meta.get('description') or 'No description provided'}",
+                f"Default branch: {meta.get('default_branch')}",
+                f"Branch inspected: {branch}",
+                f"Visibility: {'private' if meta.get('private') else 'public'}",
+                "Repository file tree (first 120 paths):",
+                *[f"- {p}" for p in paths[:120]],
+            ]
+            total = sum(len(x) for x in chunks)
+            for path in selected:
+                if total > 18000:
+                    break
+                file_response = await client.get(
+                    f"{api}/repos/{owner}/{repo_name}/contents/{path}",
+                    params={"ref": branch}, headers=headers
+                )
+                if file_response.status_code != 200:
+                    continue
+                item = file_response.json()
+                if item.get("encoding") != "base64" or not item.get("content"):
+                    continue
+                import base64
+                content = base64.b64decode(item["content"]).decode("utf-8", errors="replace")
+                content = content[:4500]
+                section = f"\\n--- FILE: {path} ---\\n{content}"
+                chunks.append(section)
+                total += len(section)
+            chunks.append(
+                "\\nINSTRUCTIONS: Use only this fetched repository evidence for claims about its implementation. "
+                "If a needed file was not fetched, say so and request the specific path or inspect it before making claims. "
+                "Do not claim to have modified, committed, deployed, or tested anything; this chat backend currently has read-only repository inspection."
+            )
+            return "\\n".join(chunks)
+    except Exception as exc:
+        print(f"GitHub repository inspection error for {owner}/{repo_name}: {exc}", flush=True)
+        return f"GitHub repository inspection could not be completed for {owner}/{repo_name}: {type(exc).__name__}. Do not invent repository details."
 
 
 def build_messages(history: list[dict[str, str]], current_message: str) -> list[dict[str, str]]:
@@ -286,6 +377,9 @@ async def models():
 @app.post("/api/chat")
 async def chat(payload: ChatRequest):
     messages = build_messages(payload.history, payload.message)
+    repo_context = await inspect_github_repository(payload.message)
+    if repo_context:
+        messages.insert(0, {"role": "system", "content": repo_context})
     selected = payload.model or DEFAULT_MODEL
     if selected == "local":
         if llm is None:
