@@ -377,7 +377,11 @@ async def models():
 @app.post("/api/chat")
 async def chat(payload: ChatRequest):
     messages = build_messages(payload.history, payload.message)
-    repo_context = await inspect_github_repository(payload.message)
+    repository_prompt = payload.message + "\n" + "\n".join(
+        item.get("content", "") for item in payload.history[-MAX_HISTORY_MESSAGES:]
+        if item.get("role") == "user" and isinstance(item.get("content"), str)
+    )
+    repo_context = await inspect_github_repository(repository_prompt)
     if repo_context:
         messages.insert(0, {"role": "system", "content": repo_context})
     selected = payload.model or DEFAULT_MODEL
