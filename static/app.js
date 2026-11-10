@@ -49,7 +49,13 @@ function appendInline(parent, source) {
 
 function renderMarkdown(container, markdown) {
   container.replaceChildren();
-  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  // Normalize inline fences and numbered steps commonly emitted by small local models.
+  markdown = markdown
+    .replace(/\r\n?/g, "\n")
+    .replace(/\s*```([a-zA-Z0-9_-]*)/g, "\n```$1\n")
+    .replace(/([^\n])\s+(?=\d+[.)]\s+(?:\*\*|[A-Z]))/g, "$1\n")
+    .replace(/([^\n])\s+(?=[-*+]\s+)/g, "$1\n");
+  const lines = markdown.split("\n");
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
