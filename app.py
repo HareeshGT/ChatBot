@@ -110,7 +110,7 @@ async def chat(payload: ChatRequest):
         raise HTTPException(status_code=503, detail="GGUF model is not loaded")
 
     # Keep the existing frontend contract: stream newline-delimited JSON chunks
-    # shaped like Ollama's {message:{content:...}, done:...} response.
+    # shaped as {message:{content:...}, done:...} response chunks.
     messages: list[dict[str, str]] = []
     for item in payload.history[-40:]:
         role, content = item.get("role"), item.get("content")
