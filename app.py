@@ -171,9 +171,39 @@ def stream_openai_compatible(base_url: str, api_key: str, model_name: str, messa
         with httpx.Client(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
             with client.stream("POST", url, headers={"Authorization": f"Bearer {api_key}"}, json=payload) as response:
                 if response.is_error:
-                    detail = response.read().decode("utf-8", errors="replace")[:1200]
-                    print(f"Provider error {response.status_code}: {detail}", flush=True)
-                    yield ndjson({"error": f"Provider request failed ({response.status_code}). Check API key, model name, and provider limits."})
+                    raw_detail = response.read().decode("utf-8", errors="replace")[:4000]
+                    try:
+                        parsed = json.loads(raw_detail)
+                        error_obj = parsed.get("error", parsed)
+                        if isinstance(error_obj, dict):
+                            provider_message = error_obj.get("message") or error_obj.get("detail") or str(error_obj)
+                            provider_code = error_obj.get("code") or error_obj.get("type")
+                        else:
+                            provider_message, provider_code = str(error_obj), None
+                    except (json.JSONDecodeError, AttributeError):
+                        provider_message, provider_code = raw_detail[:800], None
+                    retry_after = response.headers.get("retry-after")
+                    print(f"Provider error {response.status_code} code={provider_code} retry_after={retry_after}: {raw_detail}", flush=True)
+                    if response.status_code == 429:
+                        message = "Provider rate limit or quota reached."
+                        if provider_message:
+                            message += f" Details: {provider_message[:500]}"
+                        if retry_after:
+                            message += f" Retry after: {retry_after} seconds."
+                        message += " Check your provider usage, billing/credits, and rate limits. You can switch to Local in the model selector."
+                    elif response.status_code in (401, 403):
+                        message = "Provider rejected the API key or access. Check that the key is valid and has permission for this model."
+                        if provider_message:
+                            message += f" Details: {provider_message[:400]}"
+                    elif response.status_code == 404:
+                        message = "Provider could not find this model or endpoint. Check the model ID and API base URL."
+                        if provider_message:
+                            message += f" Details: {provider_message[:400]}"
+                    else:
+                        message = f"Provider request failed ({response.status_code})."
+                        if provider_message:
+                            message += f" Details: {provider_message[:500]}"
+                    yield ndjson({"error": message})
                     return
                 for line in response.iter_lines():
                     if not line.startswith("data:"):
