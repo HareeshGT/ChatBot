@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10131a">
+  <title>Local Ollama Chat</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">✳</span><div><strong>Local Chat</strong><small>Powered by Ollama</small></div></div>
+      <button id="newChat" class="new-chat">＋ <span>New chat</span></button>
+      <div class="side-note"><span class="pulse"></span><span id="statusText">Connecting to Ollama…</span></div>
+      <div class="sidebar-footer">Your prompts stay on the machine hosting this app.</div>
+    </aside>
+    <section class="main">
+      <header class="topbar">
+        <div class="mobile-brand">✳ Local Chat</div>
+        <div class="model-wrap"><label for="modelSelect">MODEL</label><select id="modelSelect"><option>Loading models…</option></select></div>
+        <button id="clearBtn" class="icon-btn" title="Clear conversation" aria-label="Clear conversation">↻</button>
+      </header>
+      <div id="conversation" class="conversation">
+        <div id="welcome" class="welcome">
+          <div class="welcome-symbol">✳</div>
+          <p class="eyebrow">PRIVATE. LOCAL. YOURS.</p>
+          <h1>What’s on your mind?</h1>
+          <p class="welcome-copy">A simple chat interface, powered by a model running on this machine.</p>
+          <div class="suggestions">
+            <button class="suggestion">Explain a concept simply</button>
+            <button class="suggestion">Help me write some code</button>
+            <button class="suggestion">Brainstorm a new idea</button>
+          </div>
+        </div>
+        <div id="messages" class="messages" aria-live="polite"></div>
+      </div>
+      <form id="chatForm" class="composer">
+        <div class="composer-box">
+          <textarea id="messageInput" rows="1" placeholder="Message your local model…" aria-label="Message" required></textarea>
+          <button id="sendBtn" class="send-btn" type="submit" aria-label="Send message">↑</button>
+        </div>
+        <div class="composer-hint">Enter to send · Shift + Enter for a new line</div>
+      </form>
+    </section>
+  </main>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
