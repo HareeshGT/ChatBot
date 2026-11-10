@@ -25,7 +25,8 @@ LLAMA_THREADS = max(1, int(os.getenv("LLAMA_THREADS", str(min(os.cpu_count() or 
 CONTEXT_SIZE = max(512, int(os.getenv("LLAMA_CONTEXT_SIZE", "2048")))
 MAX_PROMPT_CHARS = max(1000, int(os.getenv("MAX_PROMPT_CHARS", "4500")))
 MAX_HISTORY_MESSAGES = max(0, int(os.getenv("MAX_HISTORY_MESSAGES", "8")))
-MAX_GENERATION_TOKENS = max(32, int(os.getenv("MAX_GENERATION_TOKENS", "256")))
+MAX_GENERATION_TOKENS = max(128, int(os.getenv("MAX_GENERATION_TOKENS", "2048")))
+LOCAL_MAX_GENERATION_TOKENS = max(64, int(os.getenv("LOCAL_MAX_GENERATION_TOKENS", "512")))
 
 PROVIDERS = {
     "openai": {
@@ -148,7 +149,7 @@ def stream_local(messages: list[dict[str, str]]) -> Iterator[bytes]:
     try:
         with inference_lock:
             for chunk in model.create_chat_completion(
-                messages=messages, stream=True, max_tokens=MAX_GENERATION_TOKENS, temperature=0.7,
+                messages=messages, stream=True, max_tokens=LOCAL_MAX_GENERATION_TOKENS, temperature=0.7,
             ):
                 content = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content")
                 if content:
