@@ -7,6 +7,22 @@ const modelSelect = $("modelSelect");
 const sendBtn = $("sendBtn");
 let history = [];
 let busy = false;
+const providerDefaults = {
+  openai: {label:"OpenAI", model:"gpt-4o-mini"},
+  groq: {label:"Groq", model:"llama-3.3-70b-versatile"},
+  gemini: {label:"Google Gemini", model:"gemini-2.5-flash"},
+  mistral: {label:"Mistral", model:"mistral-small-latest"},
+  anthropic: {label:"Anthropic", model:"claude-3-5-haiku-latest"},
+  custom: {label:"Custom API", model:""}
+};
+const configuredModels = () => {
+  try { return JSON.parse(sessionStorage.getItem("chatbot_provider_models") || "{}"); }
+  catch { return {}; }
+};
+function saveConfiguredModels(value) {
+  sessionStorage.setItem("chatbot_provider_models", JSON.stringify(value));
+}
+
 
 function setStatus(online, text) {
   $("statusText").textContent = text;
@@ -191,6 +207,13 @@ async function loadModels() {
       option.textContent = item.label || item.name;
       modelSelect.append(option);
     }
+    const configured = configuredModels();
+    for (const [provider, config] of Object.entries(configured)) {
+      const option = document.createElement("option");
+      option.value = provider + ":" + config.model;
+      option.textContent = providerDefaults[provider].label + " · " + config.model;
+      modelSelect.append(option);
+    }
     if (data.default && [...modelSelect.options].some(o => o.value === data.default)) modelSelect.value = data.default;
     if (!modelSelect.options.length) {
       const option = document.createElement("option");
@@ -218,7 +241,18 @@ async function sendMessage(message) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({message: trimmed, model: modelSelect.value, history})
+      body: JSON.stringify((() => {
+        const selected = modelSelect.value;
+        const provider = selected.includes(":") ? selected.split(":")[0] : "local";
+        const config = configuredModels()[provider] || {};
+        return {
+          message: trimmed, model: selected, history,
+          provider: provider === "local" ? null : provider,
+          api_key: config.apiKey || null,
+          api_base: config.apiBase || null,
+          provider_model: config.model || null
+        };
+      })())
     });
     if (!response.ok || !response.body) throw new Error(await response.text() || "Request failed");
     const reader = response.body.getReader();
@@ -281,6 +315,46 @@ document.querySelectorAll(".suggestion").forEach(button => {
   button.addEventListener("click", () => {
     input.value = button.textContent;
     form.requestSubmit();
+  });
+});
+const modal = $("modelModal");
+const providerInput = $("providerInput");
+const modelInput = $("providerModelInput");
+const apiKeyInput = $("apiKeyInput");
+const apiBaseInput = $("apiBaseInput");
+function openModelModal() {
+  $("modelModalError").textContent = "";
+  modal.hidden = false;
+  updateProviderFields();
+}
+function closeModelModal() { modal.hidden = true; }
+function updateProviderFields() {
+  const provider = providerInput.value;
+  modelInput.placeholder = providerDefaults[provider].model || "Enter model ID";
+  if (!modelInput.value) modelInput.value = providerDefaults[provider].model;
+  $("customBaseRow").hidden = provider !== "custom";
+}
+$("settingsBtn").addEventListener("click", openModelModal);
+$("closeModelModal").addEventListener("click", closeModelModal);
+$("cancelModel").addEventListener("click", closeModelModal);
+modal.addEventListener("click", event => { if (event.target === modal) closeModelModal(); });
+providerInput.addEventListener("change", () => { modelInput.value = ""; updateProviderFields(); });
+$("saveModel").addEventListener("click", () => {
+  const provider = providerInput.value;
+  const apiKey = apiKeyInput.value.trim();
+  const model = modelInput.value.trim();
+  const apiBase = apiBaseInput.value.trim();
+  const error = $("modelModalError");
+  if (!apiKey || !model) { error.textContent = "API key and model ID are required."; return; }
+  if (provider === "custom" && !/^https:\/\//i.test(apiBase)) { error.textContent = "Enter a valid HTTPS API base URL."; return; }
+  const configs = configuredModels();
+  configs[provider] = {apiKey, model, apiBase};
+  try { saveConfiguredModels(configs); }
+  catch { error.textContent = "Could not save settings in this browser session."; return; }
+  loadModels().then(() => {
+    modelSelect.value = provider + ":" + model;
+    apiKeyInput.value = "";
+    closeModelModal();
   });
 });
 loadModels();
