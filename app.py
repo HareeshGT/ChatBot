@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
-DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
 TIMEOUT = httpx.Timeout(connect=10.0, read=None, write=60.0, pool=10.0)
 
 app = FastAPI(title="Local Ollama ChatBot")
