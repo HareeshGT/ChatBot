@@ -1,26 +1,43 @@
-# Deploy Ollama + ChatBot together on Render
+# Deploy Python GGUF ChatBot on Render
 
-This configuration runs Ollama and the ChatBot web app inside the **same Render service/container**. It uses the compact `qwen2.5:0.5b` model (approximately 398 MB to download), not the previous multi-gigabyte model.
+This service runs FastAPI and **llama-cpp-python in the same container**. It does not install or run Ollama. The Qwen 2.5 0.5B Instruct Q4_K_M GGUF file is downloaded from Hugging Face on first startup and stored on a persistent disk.
 
-## Render requirements
+## Configuration
 
-- Use the **Standard** web service plan (2 GB RAM) or a larger plan.
-- Attach a persistent disk mounted at `/root/.ollama`. The included `render.yaml` defines a 1 GB disk.
-- Render Free is not suitable: it has 512 MB RAM and does not support persistent disks. Even a small model can exceed the available memory once Ollama and the web app are running.
+The included `render.yaml` sets:
+
+- Dockerfile: `./Dockerfile`
+- Instance plan: Standard as a starting point; review current memory limits and pricing before applying
+- Persistent disk: 1 GB mounted at `/models`
+- Model repository: `Qwen/Qwen2.5-0.5B-Instruct-GGUF`
+- Model file: `qwen2.5-0.5b-instruct-q4_k_m.gguf`
+- CPU threads: 4
+
+The GGUF file is approximately 491 MB. The disk stores the file across restarts and redeploys; the model is loaded into RAM when the app starts. The persistent disk must be mounted at `/models` because that is the configured model directory.
 
 ## Deploy
 
 1. Open the [Render dashboard](https://dashboard.render.com/).
-2. Create or update the service from this repository using the included Blueprint `render.yaml`.
-3. Confirm the service uses `./Dockerfile` (not `Dockerfile.render`).
-4. Confirm the service plan is Standard or higher and the disk mount path is `/root/.ollama`.
-5. Deploy. On first startup, Ollama downloads the model. On subsequent starts, the persistent disk lets Ollama reuse it instead of downloading it again.
-6. After deployment, open `https://YOUR-SERVICE.onrender.com/api/health`. A healthy response includes `"ollama":"connected"` and the installed model list.
+2. Create or update a Blueprint from this repository.
+3. Review the plan and disk settings before applying.
+4. Deploy. The Docker image build compiles llama-cpp-python's CPU backend and may take several minutes.
+5. On the first start, the app downloads the GGUF model, loads it, and performs a short warm-up inference before passing the health check.
+6. Open `https://YOUR-SERVICE.onrender.com/api/health`. A healthy response contains `"engine":"llama-cpp-python"` and the model name.
 
-## Change the model
+## Environment variables
 
-Set `OLLAMA_MODEL` to another Ollama model tag in Render's Environment settings. Smaller models use less memory but generally produce less capable answers. The default is `qwen2.5:0.5b`.
+- `MODEL_REPO`: Hugging Face repository ID.
+- `MODEL_FILE`: GGUF filename in that repository.
+- `MODEL_DIR`: model directory, default `/models`.
+- `MODEL_PATH`: full path to the GGUF file.
+- `LLAMA_THREADS`: CPU threads, default 4.
+- `LLAMA_CONTEXT_SIZE`: context window, default 2048.
+- `PORT`: provided by Render.
 
-## Note
+If you change `MODEL_FILE`, update `MODEL_PATH` to the same filename. Choose a compatible GGUF model supported by llama.cpp.
 
-The configuration changes the Render Blueprint to a paid Standard service because Render Free cannot provide the RAM and persistent disk needed for this architecture. Review the selected plan and estimated cost in Render before applying it.
+## Notes
+
+- Render Free is not recommended: local inference needs RAM for model weights, context cache, and Python runtime, and the model should be kept on persistent storage.
+- CPU inference performance depends on the instance. Increasing thread count does not always improve speed.
+- The API currently has no authentication; add access controls before using it for a public-facing service.
