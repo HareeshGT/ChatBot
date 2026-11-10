@@ -12,15 +12,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FORCE_CMAKE=1
 
 # llama-cpp-python builds its CPU inference backend from source.
+# Keep libgomp1 installed because the compiled backend may link against OpenMP.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential cmake ninja-build ca-certificates curl \
+      build-essential cmake ninja-build libgomp1 ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     apt-get purge -y --auto-remove build-essential cmake ninja-build && \
-    rm -rf /root/.cache/pip
+    apt-get install -y --no-install-recommends libgomp1 && \
+    rm -rf /var/lib/apt/lists/* /root/.cache/pip
 
 COPY app.py .
 COPY static ./static
